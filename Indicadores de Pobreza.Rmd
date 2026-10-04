@@ -1,0 +1,240 @@
+---
+title: "Ejercicio de clase 2"
+subtitle: "Indicadores de pobreza 2020"
+author: "Monsalvo Velázquez Naomi"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: false
+    highlight: tango
+    latex_engine: pdflatex
+geometry: margin=2.3cm
+fontsize: 11pt
+header-includes:
+  - \usepackage{longtable}
+  - \usepackage{booktabs}
+  - \usepackage{array}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  comment = NA,
+  fig.align = "center"
+)
+```
+
+# Preparación del entorno
+
+En esta sección se cargan las librerías utilizadas para el análisis.
+
+```{r preparacion, results='hide'}
+rm(list = ls(all.names = TRUE))
+gc()
+
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(tibble)
+```
+
+# Importación de la base de datos
+
+Aqui importamos la base trabajada en clase
+
+Y seleccionamos únicamente las columnas C a DF, que contienen los indicadores de carencia por alimentación municipales
+
+```{r importar-datos, results='hide'}
+Datos <- read_excel(
+  path = "C:/Users/naomi/Downloads/Concentrado_indicadores_de_pobreza_2020.xlsx",
+  sheet = "Concentrado municipal",
+  range = cell_cols("C:DF"),
+  col_names = LETTERS[3:110]
+)
+```
+
+```{r visualizar-datos, eval=FALSE}
+View(Datos)
+```
+
+# Selección y limpieza de variables
+
+Seguimos el procedimiento visto en clase en donde:
+
+-   Seleccionamos únicamente las variables necesarias
+-   Renombramos para facilitar el análisis.
+-   Y limpiamos los encabezados y valores faltantes.
+
+```{r limpieza-datos}
+Datos <- Datos[, c(1, 3, 102, 105)]
+
+colnames(Datos) <- c("Entidad",
+                     "Municipio",
+                     "PorcentajeAlim2020",
+                     "PersonasAlim2020")
+
+Datos <- Datos[-c(1:4),]
+
+Datos$Entidad <- factor(Datos$Entidad)
+Datos$PorcentajeAlim2020 <- as.numeric(Datos$PorcentajeAlim2020)
+Datos$PersonasAlim2020 <- as.numeric(Datos$PersonasAlim2020)
+
+# Quitamos posibles NA
+Datos <- Datos[!is.na(Datos$PorcentajeAlim2020),]
+
+# Eliminamos las primeras 4 filas
+Datos <- Datos[-c(1:4),]
+
+Datos$Entidad <- factor(Datos$Entidad)
+Datos$PorcentajeAlim2020 <- as.numeric(Datos$PorcentajeAlim2020)
+Datos$PersonasAlim2020 <- as.numeric(Datos$PersonasAlim2020)
+
+Datos <- Datos[!is.na(Datos$PorcentajeAlim2020),]
+```
+
+# Construcción de intervalos de clase
+
+Como en clase, se utiliza la función `cut()` para construir intervalos de clase
+
+```{r intervalos}
+Datos$CarenciaAlimCat <- cut(Datos$PorcentajeAlim2020,
+                             breaks = c(0, 27.5, 51, 100),
+                             labels = c("[0,27.5]",
+                                        "(27.5,51]",
+                                        "(51,100]"),
+                             include.lowest = TRUE,
+                             right = TRUE)
+```
+
+# a) Clasificacion del total de individuos
+
+Construimos una tabla de frecuencias absolutas (como en clase) pero ahora ponderada por el número de personas en cada municipio.
+
+```{r clasificacion-individuos, results='hide'}
+Tabla_Personas <- Datos %>%
+  group_by(Entidad, CarenciaAlimCat) %>%
+  summarise(TotalPersonas = sum(PersonasAlim2020, na.rm = TRUE)) %>%
+  spread(key = CarenciaAlimCat,
+         value = TotalPersonas,
+         fill = 0) %>%
+  column_to_rownames("Entidad") %>%
+  as.matrix()
+
+Tabla_Personas
+```
+
+```{r tabla-individuos, echo=FALSE}
+knitr::kable(
+  Tabla_Personas,
+  format = "latex",
+  booktabs = TRUE,
+  longtable = TRUE,
+  caption = "Clasificación del total de personas por entidad",
+  format.args = list(
+    big.mark = ",",
+    scientific = FALSE
+  )
+)
+```
+
+## Proporciones por persona
+
+```{r proporciones-individuos, results='hide'}
+Tabla_Personas_Prop <- prop.table(Tabla_Personas, margin = 1)
+round(Tabla_Personas_Prop, 2)
+```
+
+```{r tabla-proporciones, echo=FALSE}
+knitr::kable(
+  round(Tabla_Personas_Prop, 2),
+  format = "latex",
+  booktabs = TRUE,
+  longtable = TRUE,
+  caption = "Proporciones de personas por entidad"
+)
+```
+
+## Interpretación
+
+En la mayoría de las entidades, la mayor parte de la población vive en municipios con nivel bajo de carencia alimentaria (0–27.5%). Sin embargo, en algunas entidades una proporción importante de personas vive en municipios con niveles medios o incluso altos. Estas entidades deberían de ser las primeras en ser tomadas en cuenta para realizar una política pública enfocada para mejorar el acceso a la alimentación.
+
+# b) Clasificacion del total de municipios
+
+Se construye una tabla de frecuencia absoluta de municipios por entidad y categoría, como se trabajó en clase con `table()`.
+
+```{r clasificacion-municipios, results='hide'}
+FA_Entidad <- table(Datos$Entidad, Datos$CarenciaAlimCat)
+FA_Entidad
+```
+
+```{r tabla-municipios, echo=FALSE}
+knitr::kable(
+  FA_Entidad,
+  format = "latex",
+  booktabs = TRUE,
+  longtable = TRUE,
+  caption = "Frecuencias absolutas de municipios por entidad"
+)
+```
+
+## Frecuencias relativas
+
+```{r frecuencias-relativas, results='hide'}
+FR_Entidad <- prop.table(FA_Entidad, margin = 1)
+round(FR_Entidad, 2)
+```
+
+```{r tabla-frecuencias-relativas, echo=FALSE}
+knitr::kable(
+  round(FR_Entidad, 2),
+  format = "latex",
+  booktabs = TRUE,
+  longtable = TRUE,
+  caption = "Frecuencias relativas de municipios por entidad"
+)
+```
+
+## Interpretación
+
+En la mayoría de los estados, la mayor parte de sus municipios se ubica en el nivel bajo de carencia. Pero entidades como Tabasco, Guerrero, Oaxaca y Puebla presentan una proporción considerable de municipios en nivel medio o alto, esto nos dice de varios problemas con el acceso a la alimentación
+
+# c) Clasificacion del total de entidades
+
+Se calcula un promedio ponderado estatal (ponderado por el número de personas),
+
+```{r clasificacion-entidades}
+Entidad_Total <- Datos %>%
+  group_by(Entidad) %>%
+  summarise(
+    TotalPersonas = sum(PersonasAlim2020, na.rm = TRUE),
+    PromedioEstatal = weighted.mean(PorcentajeAlim2020,
+                                    w = PersonasAlim2020,
+                                    na.rm = TRUE)
+  )
+
+Entidad_Total$CategoriaEntidad <- cut(Entidad_Total$PromedioEstatal,
+                                      breaks = c(0, 27.5, 51, 100),
+                                      labels = c("[0,27.5]",
+                                                 "(27.5,51]",
+                                                 "(51,100]"),
+                                      include.lowest = TRUE)
+
+table(Entidad_Total$CategoriaEntidad)
+```
+
+```{r tabla-entidades, echo=FALSE}
+knitr::kable(
+  as.data.frame(table(Entidad_Total$CategoriaEntidad)),
+  col.names = c("Categoría", "Número de entidades"),
+  format = "latex",
+  booktabs = TRUE,
+  caption = "Clasificación del total de entidades"
+)
+```
+
+## Interpretación
+
+A nivel estatal, la mayoría de las entidades se ubica en el rango bajo de carencia alimentaria y ninguna en el rango alto. Sin embargo, las entidades que estan clasificadas en nivel medio deben de ser las entidades que se tomen primero en cuenta al realizar el boceto de una política pública
